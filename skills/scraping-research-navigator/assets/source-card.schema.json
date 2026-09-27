@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source card",
+  "description": "One card per retailer/source. Written when a source is onboarded or repaired; the daily crawl reads it and the coverage and methods tables are generated from the set of cards. Header and cookie NAMES only, never values.",
+  "type": "object",
+  "required": ["source_id", "retailer", "base_url", "categories", "status", "tier", "reason_for_tier",
+               "tiers_tried", "probe", "schedule", "sitemap", "politeness", "validation", "coverage", "cost",
+               "self_critique", "provenance", "updated_at"],
+  "properties": {
+    "source_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "Stable slug, e.g. 'migros-tr'."},
+    "retailer": {"type": "string"},
+    "base_url": {"type": "string"},
+    "categories": {
+      "type": "array", "minItems": 1,
+      "description": "CPI groups covered, as COICOP 2018 codes (division '01' or deeper, e.g. '01.1.1'), the classification CPIs are built on; check TÜİK's current version. Examples: 01 food and non-alcoholic beverages, 03 clothing and footwear, 04.1 actual rentals, 04.3 maintenance and repair of the dwelling (construction supplies), 05 furnishings and household equipment, 08 information and communication, 13.1 personal care (cosmetics).",
+      "items": {
+        "type": "object",
+        "required": ["coicop", "label"],
+        "properties": {
+          "coicop": {"type": "string", "pattern": "^(0[1-9]|1[0-3])(\\.[0-9]+){0,3}$"},
+          "label": {"type": "string"}
+        }
+      }
+    },
+    "status": {"enum": ["active", "coverage_gap", "needs_review", "retired"]},
+    "tier": {"enum": [1, 2, 3, "gap"], "description": "Tier the daily crawl uses, or 'gap' when no allowed tier works. A source that works through the sitemap step (another page type in raw HTML) is tier 1."},
+    "reason_for_tier": {"type": "string", "description": "Concrete reason, e.g. 'price client-rendered; listing API returns 48 items/call'."},
+    "tiers_tried": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tier", "outcome", "reason"],
+        "properties": {
+          "tier": {"enum": [0, 1, "sitemap", 2, 3]},
+          "outcome": {"enum": ["works", "failed", "skipped"]},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "description": "Results of the Tier 0 pre-flight (acquisition-strategy.md).",
+      "required": ["probed_at", "status", "robots_allowed", "anti_bot_vendors_present", "challenge_served"],
+      "properties": {
+        "probed_at": {"type": "string"},
+        "status": {"type": ["integer", "null"]},
+        "robots_allowed": {"type": ["boolean", "null"]},
+        "crawl_delay": {"type": ["number", "null"]},
+        "sitemaps": {"type": "array", "items": {"type": "string"}},
+        "anti_bot_vendors_present": {"type": "array", "items": {"type": "string"}},
+        "challenge_served": {"type": "boolean"}
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "description": "When the daily crawl runs. Incremental crawling by lastmod assumes a fixed daily time.",
+      "required": ["crawl_time_local", "timezone"],
+      "properties": {
+        "crawl_time_local": {"type": "string", "pattern": "^[0-2][0-9]:[0-5][0-9]$"},
+        "timezone": {"type": "string", "description": "e.g. Europe/Istanbul"},
+        "runner": {"enum": ["github-actions", "cron", "airflow", "manual", "other"]},
+        "carried_forward_share": {"type": ["number", "null"], "maximum": 1,
+                                  "description": "Share of prices carried forward (not re-observed) on a typical day; a sudden rise means the sitemap may have stopped updating."}
+      }
+    },
+    "sitemap": {
+      "type": "object",
+      "description": "From reading the sitemap (acquisition-strategy.md > Sitemaps). Drives URL discovery and incremental crawling.",
+      "required": ["index_url", "crawl_mode", "lastmod_verdict"],
+      "properties": {
+        "index_url": {"type": ["string", "null"], "description": "null when the site has no sitemap."},
+        "product_urls": {"type": ["integer", "null"]},
+        "category_urls": {"type": ["integer", "null"]},
+        "product_pattern": {"type": "string", "description": "Only if the defaults misclassify."},
+        "category_pattern": {"type": "string"},
+        "crawl_mode": {"enum": ["incremental", "full", "category-pages"],
+                       "description": "incremental = only new/changed product URLs by lastmod (requires lastmod_check.result 'reliable'); full = every product URL daily; category-pages = prices from listings, product pages only for new/changed products' details."},
+        "lastmod_verdict": {"enum": ["absent", "sparse", "suspect", "plausible"]},
+        "lastmod_check": {
+          "type": "object",
+          "description": "Re-fetching sampled unchanged products to confirm lastmod tracks price changes.",
+          "properties": {
+            "days_checked": {"type": "integer"},
+            "unchanged_sampled": {"type": "integer"},
+            "price_changed_without_lastmod": {"type": "integer"},
+            "result": {"enum": ["reliable", "unreliable", "not_checked"]}
+          }
+        }
+      }
+    },
+    "access": {
+      "type": "object",
+      "description": "How the chosen tier fetches data. Must work for any member of the public: no accounts, paid keys or private agreements.",
+      "properties": {
+        "method": {"enum": ["GET", "POST"]},
+        "url_template": {"type": "string", "description": "Endpoint or page pattern, with {placeholders}."},
+        "pagination": {"type": "string", "description": "Parameter and scheme, e.g. 'page=1..N', 'offset+limit'."},
+        "page_size": {"type": "integer"},
+        "required_headers": {"type": "array", "items": {"type": "string"}, "description": "Names only."},
+        "required_cookies": {"type": "array", "items": {"type": "string"}, "description": "Names only; ordinary session/store/CSRF cookies, never anti-bot clearance cookies."},
+        "session_bootstrap": {"type": ["string", "null"], "description": "e.g. 'one GET of the homepage per run for XSRF-TOKEN'."},
+        "region_parameters": {"type": "array", "items": {"type": "string"}, "description": "Store/city parameters, for regional prices."}
+      }
+    },
+    "fields": {
+      "type": "object",
+      "description": "Where each output field comes from (JSON path or selector).",
+      "properties": {
+        "product_id": {"type": "string"},
+        "name": {"type": "string"},
+        "price": {"type": "string"},
+        "promo_price": {"type": "string"},
+        "currency": {"type": "string"},
+        "package_size": {"type": "string"},
+        "availability": {"type": "string"},
+        "barcode": {"type": "string"}
+      }
+    },
+    "politeness": {
+      "type": "object",
+      "required": ["delay_seconds", "concurrency_per_host", "respects_robots"],
+      "properties": {
+        "delay_seconds": {"type": "number"},
+        "concurrency_per_host": {"type": "integer", "minimum": 1, "description": "Chosen by the user; the skill suggests no number."},
+        "concurrency_total": {"type": "integer", "minimum": 1, "description": "Chosen by the user; the skill suggests no number."},
+        "respects_robots": {"const": true},
+        "conditional_requests": {"type": "boolean", "description": "ETag / If-Modified-Since on repeat days."},
+        "user_agent": {"type": "string"}
+      }
+    },
+    "validation": {
+      "type": "object",
+      "description": "Result of the validation gate (acquisition-strategy.md). The tier is not accepted until result is 'pass'.",
+      "required": ["result", "sampled", "matched", "checked_at"],
+      "properties": {
+        "result": {"enum": ["pass", "partial", "fail", "insufficient"]},
+        "sampled": {"type": "integer"},
+        "matched": {"type": "integer"},
+        "reference_method": {"type": "string"},
+        "checked_at": {"type": "string"},
+        "mismatches": {"type": "array"}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["estimated_products", "known_gaps"],
+      "properties": {
+        "estimated_products": {"type": ["integer", "null"]},
+        "regions": {"type": "array", "items": {"type": "string"}},
+        "known_gaps": {"type": "array", "items": {"type": "string"}, "description": "e.g. 'fresh produce sold by weight', 'category X behind challenge'."}
+      }
+    },
+    "cost": {
+      "type": "object",
+      "required": ["requests_per_run", "runtime_seconds"],
+      "properties": {
+        "requests_per_run": {"type": "integer"},
+        "bytes_per_run": {"type": ["integer", "null"]},
+        "runtime_seconds": {"type": "number"}
+      }
+    },
+    "self_critique": {
+      "type": "object",
+      "description": "What could make this card wrong. Be specific; an empty list is a claim, not a default.",
+      "required": ["assumptions", "skipped_steps", "staleness_risks"],
+      "properties": {
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "skipped_steps": {"type": "array", "items": {"type": "string"}},
+        "staleness_risks": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["knowledge_versions", "pages_consulted"],
+      "properties": {
+        "knowledge_versions": {"type": "object", "description": "Commit per source repo, from `git log -1 --format='%h %cs'` in each checkout."},
+        "pages_consulted": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {"path": {"type": "string"}, "last_updated": {"type": "string"}, "tag": {"enum": ["[build]", "[diagnose]", "[paid]"]}}
+          }
+        }
+      }
+    },
+    "scraper": {
+      "type": "object",
+      "properties": {
+        "module": {"type": "string"},
+        "tests": {"type": "string"},
+        "parser_version": {"type": "string"}
+      }
+    },
+    "updated_at": {"type": "string"}
+  }
+}

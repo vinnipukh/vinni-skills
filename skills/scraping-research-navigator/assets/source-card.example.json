@@ -1,0 +1,89 @@
+{
+  "source_id": "example-market-tr",
+  "retailer": "Example Market (illustrative, not a real source)",
+  "base_url": "https://www.example-market.com.tr",
+  "categories": [
+    {"coicop": "01", "label": "food and non-alcoholic beverages"},
+    {"coicop": "13.1", "label": "personal care (cosmetics)"}
+  ],
+  "status": "active",
+  "tier": 2,
+  "reason_for_tier": "Prices are rendered client-side; the category listing API returns 48 products per call with stable product IDs.",
+  "tiers_tried": [
+    {"tier": 0, "outcome": "works", "reason": "robots.txt allows /kategori/ and /api/; sitemap lists category pages"},
+    {"tier": 1, "outcome": "failed", "reason": "price not in raw HTML; no JSON-LD or state blob"},
+    {"tier": "sitemap", "outcome": "failed", "reason": "product and category URLs from the sitemap also render prices client-side"},
+    {"tier": 2, "outcome": "works", "reason": "GET /api/v2/products?category={id}&page={n} replays with 3 headers and a store cookie"}
+  ],
+  "probe": {
+    "probed_at": "2026-09-27T09:00:00+00:00",
+    "status": 200,
+    "robots_allowed": true,
+    "crawl_delay": null,
+    "sitemaps": ["https://www.example-market.com.tr/sitemap.xml"],
+    "anti_bot_vendors_present": ["Cloudflare"],
+    "challenge_served": false
+  },
+  "schedule": {"crawl_time_local": "07:15", "timezone": "Europe/Istanbul", "runner": "github-actions", "carried_forward_share": null},
+  "sitemap": {
+    "index_url": "https://www.example-market.com.tr/sitemap.xml",
+    "product_urls": 11840,
+    "category_urls": 214,
+    "crawl_mode": "category-pages",
+    "lastmod_verdict": "plausible",
+    "lastmod_check": {"days_checked": 7, "unchanged_sampled": 140, "price_changed_without_lastmod": 0, "result": "reliable"}
+  },
+  "access": {
+    "method": "GET",
+    "url_template": "https://www.example-market.com.tr/api/v2/products?category={category_id}&page={page}&size=48",
+    "pagination": "page=1..N until an empty items array",
+    "page_size": 48,
+    "required_headers": ["Accept", "Accept-Language", "Referer"],
+    "required_cookies": ["store_id"],
+    "session_bootstrap": "one GET of the homepage per run sets store_id",
+    "region_parameters": ["store_id"]
+  },
+  "fields": {
+    "product_id": "$.items[*].id",
+    "name": "$.items[*].name",
+    "price": "$.items[*].price.regular",
+    "promo_price": "$.items[*].price.discounted",
+    "currency": "TRY (constant)",
+    "package_size": "$.items[*].unitText",
+    "availability": "$.items[*].inStock",
+    "barcode": "$.items[*].gtin"
+  },
+  "politeness": {
+    "delay_seconds": 4,
+    "concurrency_per_host": 1,
+    "respects_robots": true,
+    "conditional_requests": false
+  },
+  "validation": {
+    "result": "pass",
+    "sampled": 8,
+    "matched": 8,
+    "reference_method": "price read from the live page in a normal browser",
+    "checked_at": "2026-09-27",
+    "mismatches": []
+  },
+  "coverage": {
+    "estimated_products": 12000,
+    "regions": ["istanbul-default-store"],
+    "known_gaps": ["fresh produce sold by weight has no fixed package size", "prices are for one store; other cities not sampled"]
+  },
+  "cost": {"requests_per_run": 260, "bytes_per_run": 9500000, "runtime_seconds": 1100},
+  "self_critique": {
+    "assumptions": ["the default store's prices are representative of Istanbul"],
+    "skipped_steps": ["conditional requests: the API sends no ETag"],
+    "staleness_risks": ["API version in the path (v2) may change without notice"]
+  },
+  "provenance": {
+    "knowledge_versions": {"scraping-wiki": "b1043e2 2026-09-23", "awesome-web-scraping": "5fcf6a3 2026-09-20"},
+    "pages_consulted": [
+      {"path": "concepts/api-scraping.md", "last_updated": "2026-05-07", "tag": "[build]"}
+    ]
+  },
+  "scraper": {"module": "src/sources/example_market.py", "tests": "tests/test_example_market.py", "parser_version": "1"},
+  "updated_at": "2026-09-27"
+}
